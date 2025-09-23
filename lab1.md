@@ -203,7 +203,7 @@ SELECT
   symbol,
   MIN(price) AS min_price,
   MAX(price) AS max_price
-FROM stock_prices
+FROM stock_prices_lastname
 GROUP BY symbol;
 ```
 
