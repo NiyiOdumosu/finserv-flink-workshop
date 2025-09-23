@@ -152,7 +152,7 @@ DESCRIBE stock_prices_lastname;
 
 Let's check if any stock records exist in the table.
 ```
-SELECT * FROM stock_prices_lastname;
+SELECT * FROM stock_prices_lastname LIMIT 10;
 ```
 
 Now check if the `user_profiles_lastname` schema  exists. 
@@ -163,7 +163,7 @@ DESCRIBE user_profiles_lastname;
 Are there any users in user_profiles whose last name starts with `B` ?
 ```
 SELECT * FROM user_profiles_lastname
-  WHERE `name` LIKE 'B%';
+  WHERE `name` LIKE 'B%' LIMIT 10;
 ```
 
 Check all attributes of the `stock_orders_lastname` table including hidden attributes. This will show regular DESCRIBE and system columns.
