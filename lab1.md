@@ -28,15 +28,15 @@ Let's verify if all resources were created correctly and we can start using them
 
 ### Kafka Topics
 Check if the following topics exist in your Kafka cluster:
- * stock_orders (for stock order trade data),
- * stock_prices (for dynamic stock price data),
- * user_profiles (for users data aka user CRM).
+ * stock_orders_lastname (for stock order trade data),
+ * stock_prices_lastname (for dynamic stock price data),
+ * user_profiles_lastname (for users data aka user CRM).
 
 ### Schemas in Schema Registry
 Check if the following Avro schemas exist in your Schema Registry:
- * stock_orders-value,
- * stock_prices-value,
- * user_profiles-value.
+ * stock_orders_lastname-value,
+ * stock_prices_lastname-value,
+ * user_profiles_lastname-value.
 
 NOTE: Schema Registry is at the Environment level and can be used for multiple Kafka clusters.
 
@@ -45,9 +45,9 @@ Your Kafka cluster should have three Datagen Source Connectors running. Check if
 
 | Connector Name (can be anything)     |      Topic      | Format  |             Template      | 
 |--------------------------------------|:---------------:|--------:|--------------------------:|
-| **DatagenSourceConnector_stocks**    | stock_orders    |   AVRO  |  **Trades**               | 
-| **DatagenSourceConnector_prices**    | stock_prices    |   AVRO  | **Realtime Stock Prices** | 
-| **DatagenSourceConnector_users**     | user_profiles   |   AVRO  |  **Trade Customers**      | 
+| **DatagenSourceConnector_stocks**    | stock_orders_lastname    |   AVRO  |  **Trades**               | 
+| **DatagenSourceConnector_prices**    | stock_prices_lastname    |   AVRO  | **Realtime Stock Prices** | 
+| **DatagenSourceConnector_users**     | user_profiles_lastname   |   AVRO  |  **Trade Customers**      | 
 
 ## 2. Create Pool
 
@@ -125,7 +125,7 @@ List all Flink Tables (=Kafka topics) in your Confluent Cloud cluster:
 ```
 SHOW TABLES;
 ```
-Do you see tables `stock_orders`, `stock_prices`, `user_profiles`?
+Do you see tables `stock_orders_lastname`, `stock_prices_lastname`, `user_profiles_lastname`?
 
 ![image](terraform/img/showtables.png)
 
@@ -147,35 +147,35 @@ Our Flink tables are populated by the Datagen connectors.
 
 Let us first check the table schema for our `stock_prices` catalog. This should be the same as the topic schema in Schema Registry.
 ```
-DESCRIBE stock_prices;
+DESCRIBE stock_prices_lastname;
 ```
 
 Let's check if any stock records exist in the table.
 ```
-SELECT * FROM stock_prices;
+SELECT * FROM stock_prices_lastname;
 ```
 
-Now check if the `user_profiles` schema  exists. 
+Now check if the `user_profiles_lastname` schema  exists. 
 ```
-DESCRIBE user_profiles;
+DESCRIBE user_profiles_lastname;
 ```
 
 Are there any users in user_profiles whose last name starts with `B` ?
 ```
-SELECT * FROM user_profiles
+SELECT * FROM user_profiles_lastname
   WHERE `name` LIKE 'B%';
 ```
 
-Check all attributes of the `stock_orders` table including hidden attributes. This will show regular DESCRIBE and system columns.
+Check all attributes of the `stock_orders_lastname` table including hidden attributes. This will show regular DESCRIBE and system columns.
 ```
-DESCRIBE EXTENDED stock_orders;
+DESCRIBE EXTENDED stock_orders_lastname;
 ```
 Noticed the `$rowtime`, a system column in Apache Flink SQL that captures the event-time timestamp of a Kafka record. In our use case, this will represent the exact time an order was created or placed, which will be leveraged in downstream transformations and time-based analytics.
 
 Now let's check the first ten stock trades for one user.
 ```
 SELECT *
-  FROM stock_orders
+  FROM stock_orders_lastname
   WHERE user_id = 'User9'
   LIMIT 10;
 ```
@@ -186,11 +186,11 @@ Let's try to run more advanced queries.
 First find out the number of user_profile records and then the number of unique users.
 
 ```sql
-SELECT COUNT(user_id) AS num_users FROM user_profiles;
+SELECT COUNT(user_id) AS num_users FROM user_profiles_lastname;
 ```
 
 ```sql
-SELECT COUNT(DISTINCT user_id) AS num_users FROM user_profiles;
+SELECT COUNT(DISTINCT user_id) AS num_users FROM user_profiles_lastname;
 ```
 Noticed a difference in the results between the two queries above:
 This is because user_profiles is a continuous event stream capturing updates for users over time—resulting in multiple records per user. However, our goal is to track only the unique set of customers.
@@ -222,7 +222,7 @@ SELECT
  symbol,
  COUNT(DISTINCT order_id) AS num_orders
 FROM TABLE(
-   TUMBLE(TABLE stock_orders, DESCRIPTOR(`$rowtime`), INTERVAL '1' MINUTES))
+   TUMBLE(TABLE stock_orders_lastname, DESCRIPTOR(`$rowtime`), INTERVAL '1' MINUTES))
 GROUP BY window_start, window_end, symbol;
 ```
 
@@ -235,7 +235,7 @@ SELECT
   window_end,
   AVG(price) AS avg_price
 FROM TABLE(
-   TUMBLE(TABLE stock_prices, DESCRIPTOR(`$rowtime`), INTERVAL '5' MINUTES))
+   TUMBLE(TABLE stock_prices_lastname, DESCRIPTOR(`$rowtime`), INTERVAL '5' MINUTES))
 GROUP BY window_start, window_end, symbol;
 ```
 Find the amount of stock trades for ten minute intervals advanced by five minutes (hopping window aggregation).
@@ -244,7 +244,7 @@ SELECT
  window_start, window_end,
  COUNT(DISTINCT order_id) AS num_orders
 FROM TABLE(
-   HOP(TABLE stock_orders, DESCRIPTOR(`$rowtime`), INTERVAL '5' MINUTES, INTERVAL '10' MINUTES))
+   HOP(TABLE stock_orders_lastname, DESCRIPTOR(`$rowtime`), INTERVAL '5' MINUTES, INTERVAL '10' MINUTES))
 GROUP BY window_start, window_end;
 ```
 
@@ -259,7 +259,7 @@ Also, you may have noticed the presence of an `ssn` field in the `user_profiles`
 
 Note : Attaching a unique <PREFIX> to the table name will ensures that multiple participants can work in the same cluster without naming conflicts.
 ```sql
-CREATE TABLE user_profiles_keyed_and_masked (
+CREATE TABLE user_profiles_lastname_keyed_and_masked (
   user_id STRING,
   name STRING,
   email STRING,
@@ -273,7 +273,7 @@ CREATE TABLE user_profiles_keyed_and_masked (
  * PRIMARY KEY (user_id) NOT ENFORCED specifies the primary key constraint. In Flink SQL, primary keys are currently not enforced by default due to the challenges of ensuring uniqueness across distributed systems. The NOT ENFORCED clause reflects this, indicating that while the primary key is used for optimizations and correct processing, it does not guarantee data uniqueness constraints as a traditional database might.
 
 ```bash
-SHOW CREATE TABLE user_profiles_keyed_and_masked;
+SHOW CREATE TABLE user_profiles_lastname_keyed_and_masked;
 ```
 
 We do have a different [changelog.mode](https://docs.confluent.io/cloud/current/flink/reference/statements/create-table.html#changelog-mode) and a [primary key](https://docs.confluent.io/cloud/current/flink/reference/statements/create-table.html#primary-key-constraint) constraint. What does this mean?
@@ -283,7 +283,7 @@ NOTE: You can find more information about changelog mode [here.](https://docs.co
 Create a new Flink job to copy customer records from the original table to the new table with masked ssn.
 
 ```sql
-INSERT INTO user_profiles_keyed_and_masked 
+INSERT INTO user_profiles_lastname_keyed_and_masked 
 SELECT
   user_id,
   name,
@@ -293,7 +293,7 @@ SELECT
 FROM user_profiles;
 ```
 
-Show the amount of users in `user_profiles_keyed_and_masked`.
+Show the amount of users in `user_profiles_lastname_keyed_and_masked`.
 ```
 SELECT COUNT(*) as AMOUNTROWS FROM user_profiles_keyed_and_masked;
 ```
@@ -302,7 +302,7 @@ Look up one specific customer (change the id if needed):
 
 ```sql
 SELECT * 
- FROM user_profiles_keyed_and_masked  
+ FROM user_profiles_lastname_keyed_and_masked  
  WHERE user_id = 'User10';
 ```
 
@@ -310,7 +310,7 @@ Compare it with all customer records for one specific customer:
 
 ```sql
 SELECT *
- FROM user_profiles
+ FROM user_profiles_lastname
  WHERE user_id = 'User10';
 ```
 
@@ -319,7 +319,7 @@ We also need to deduplicate records for our stock price catalog.
 Let's prepare a new table that will store unique stock only:
 
 ```sql
-CREATE TABLE stock_prices_keyed (
+CREATE TABLE stock_prices_lastname_keyed (
   symbol STRING,
   price INTEGER,
   `timestamp` BIGINT,
@@ -330,16 +330,16 @@ CREATE TABLE stock_prices_keyed (
 Create a new Flink job to copy product data from the original table to the new table. 
 
 ```sql
-INSERT INTO stock_prices_keyed 
+INSERT INTO stock_prices_lastname_keyed 
   SELECT symbol,price,`timestamp`
-    FROM stock_prices;
+    FROM stock_prices_lastname;
 ```
 
 Check if only a single record is returned for some stock.
 
 ```sql
 SELECT * 
- FROM stock_prices_keyed
+ FROM stock_prices_lastname_keyed
  WHERE symbol = 'GOOG';
 ```
 
@@ -357,7 +357,7 @@ confluent flink statement list --cloud aws --region eu-central-1 --environment <
 #--------------------------------+--------------------+--------------------------------+--------------+-----------+------------------------------------------
 #...
 # 2023-11-15 16:14:38 +0000 UTC  | f041ae19-c932-403f  | CREATE TABLE                   | lfcp-jvv9jq  | COMPLETED | Table 'user_profiles_keyed'             
-#                                |                     | user_profiles_keyed(           |              |           | created                                  
+#                                |                     | user_profiles_lastname_keyed(  |              |           | created                                  
 #                                |                     |  user_id STRING,               |              |           |                                          
 #                                |                     | name STRING,   email           |              |           |                                          
 #                                |                     | STRING,   ssn STRING,          |              |           |                                          
