@@ -290,7 +290,7 @@ SELECT
   email,
   phone,
   CONCAT('***-**-', SUBSTRING(ssn, 8)) AS ssn
-FROM user_profiles;
+FROM user_profiles_lastname;
 ```
 
 Show the amount of users in `user_profiles_lastname_keyed_and_masked`.
