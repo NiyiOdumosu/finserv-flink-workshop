@@ -36,7 +36,7 @@ If you left the Flink SQL Workspace or refreshed the page, `catalog` and `databa
 Find all user records for one user_id and display the timestamps from when the events were ingested in the `user_profiles` Kafka topic.
 ```
 SELECT user_id,$rowtime 
-FROM user_profiles_lastname  
+FROM user_profiles_<lastname>  
 WHERE user_id = 'User9';
 ```
 NOTE: Check the timestamps from when the user records were generated.
