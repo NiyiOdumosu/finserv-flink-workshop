@@ -122,7 +122,7 @@ We will join data from: User Profile , Order, Prices tables together in a single
 Create a new table for `Stock Orders <-> Users Profile <-> Stock Prices` join result:
 
 ```sql
-CREATE TABLE stock_price_lastname_data_product (
+CREATE TABLE stock_prices_lastname_data_product (
   order_id INT,
   user_id STRING,
   user_name STRING,
@@ -141,10 +141,10 @@ CREATE TABLE stock_price_lastname_data_product (
 Noticed the `WATERMARK` clause - it is used to handle event-time processing in Flink. By specifying WATERMARK FOR order_time AS order_time - INTERVAL '5' SECOND, we define a watermark for the order_time field. This watermark ensures that any event with a timestamp that is more than 5 seconds behind the current processing time is considered late. Watermarks help Flink handle out-of-order events and allow for more accurate event-time processing.
 You can read more about watermarks and event time [here.](https://docs.confluent.io/cloud/current/flink/concepts/timely-stream-processing.html#event-time-and-watermarks)
 
-Now create a new Flink job to join all three tables `Stock Orders <-> Users Profile <-> Stock Prices` and insert data into `stock_price_data_product` table .
+Now create a new Flink job to join all three tables `Stock Orders <-> Users Profile <-> Stock Prices` and insert data into `stock_prices_lastname_data_product` table .
 
 ```
-INSERT INTO stock_price_lastname_data_product
+INSERT INTO stock_prices_lastname_data_product
 SELECT
   o.order_id,
   o.user_id,
@@ -167,7 +167,7 @@ JOIN user_profiles_lastname_keyed_and_masked FOR SYSTEM_TIME AS OF o.`$rowtime` 
 
 Verify that the data was joined successfully. 
 ```
-SELECT * FROM stock_price_data_product;
+SELECT * FROM stock_prices_lastname_data_product;
 ```
 
 ### 💼 5. Derive User Holdings
@@ -197,7 +197,7 @@ SELECT
   SUM(CASE WHEN side = 'BUY' THEN executed_price * quantity ELSE 0 END) AS total_invested,
 
   MAX(`$rowtime`) AS last_updated
-FROM stock_price_lastname_data_product 
+FROM stock_prices_lastname_data_product 
 GROUP BY user_id, user_name, user_email, user_phone, symbol;
 ```
 
@@ -241,7 +241,7 @@ SELECT
   SUM(CASE WHEN side = 'BUY' THEN executed_price * quantity ELSE 0 END) AS total_invested,
 
   MAX(`$rowtime`) AS last_updated
-FROM stock_price_lastname_data_product 
+FROM stock_prices_lastname_data_product 
 GROUP BY user_id, user_name, user_email, user_phone, symbol;
 ```
 
@@ -259,7 +259,7 @@ SELECT
   user_id,
   COUNT(order_id) AS trade_count,
   SUM(trade_value) AS total_trade_value
-FROM stock_price_lastname_data_product
+FROM stock_prices_lastname_data_product
 GROUP BY user_id
 ORDER BY total_trade_value DESC
 LIMIT 10;
@@ -289,7 +289,7 @@ SELECT
     ORDER BY order_time 
     ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
   ) AS rolling_trade_value
-FROM stock_price_lastname_data_product;
+FROM stock_prices_lastname_data_product;
 
 ```
 - PARTITION BY symbol: ensures aggregation happens per stock.
