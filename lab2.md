@@ -44,7 +44,7 @@ NOTE: Check the timestamps from when the user records were generated.
 Find all stock_orders for one customer and display the timestamps from when the events were ingested in the `stock_orders` Kafka topic.
 ```
 SELECT order_id ,$rowtime
-FROM stock_orders_lastname
+FROM stock_orders_<lastname>
 WHERE user_id = 'User9';
 ```
 NOTE: Check the timestamps when the orders were generated. This is important for the join operations we will do next.
@@ -52,20 +52,20 @@ NOTE: Check the timestamps when the orders were generated. This is important for
 Find all stock prices for one symbol and display the timestamps from when the events were ingested in the `stock_prices` Kafka topic.
 ```
 SELECT symbol,$rowtime 
-FROM stock_prices_lastname  
+FROM stock_prices_<lastname>  
 WHERE symbol = 'GOOG';
 ```
 
 ### 3. Understand Joins
 Now, we can look at the different types of joins available. 
-We will join `stock_orders_lastname` records and `stock_prices_lastname` records.
+We will join `stock_orders_<lastname>` records and `stock_prices_<lastname>` records.
 
 Join stock orders with non-keyed stock prices records (Regular Join). Joining unbounded data streams requires Time-To-Live configuration:
 ```
 SELECT /*+ STATE_TTL('sp'='6h', 'so'='2d') */  
 order_id, so.`$rowtime`, so.symbol
-FROM stock_orders_lastname as so
-INNER JOIN stock_prices_lastname as sp
+FROM stock_orders_<lastname> as so
+INNER JOIN stock_prices_<lastname> as sp
 ON so.symbol = sp.symbol
 WHERE so.symbol  = 'GOOG';
 ```
@@ -78,8 +78,8 @@ Join orders with non-keyed prices records in some time windows (Interval Join):
 Check if there is a stock price record that was created within 10 minutes after the order was created. Did price changed after/before placing the order?
 ```
 SELECT order_id, so.`$rowtime` AS order_time, sp.`$rowtime` AS price_change_record_time , so.symbol
-FROM stock_orders_lastname as so
-INNER JOIN stock_prices_lastname as sp
+FROM stock_orders_<lastname> as so
+INNER JOIN stock_prices_<lastname> as sp
 ON so.symbol = sp.symbol
 WHERE order_id = 955 AND
   so.`$rowtime` BETWEEN sp.`$rowtime` - INTERVAL '10' MINUTES AND sp.`$rowtime`;
@@ -88,8 +88,8 @@ WHERE order_id = 955 AND
 Join orders with keyed stock price records (Regular Join with Keyed Table):
 ```
 SELECT order_id, so.`$rowtime`,so.symbol,user_id,side,quantity,order_type
-FROM stock_orders_lastname as so
-INNER JOIN stock_prices_lastname_keyed as spk
+FROM stock_orders_<lastname> as so
+INNER JOIN stock_prices_<lastname>_keyed as spk
 ON so.symbol = spk.symbol
 WHERE so.order_id = 955;
 ```
@@ -107,8 +107,8 @@ SELECT
   o.symbol,
   o.quantity,
   p.price AS executed_price,
-  o.quantity * p.price AS trade_value FROM stock_orders_lastname AS o
-JOIN stock_prices_lastname_keyed FOR SYSTEM_TIME AS OF o.`$rowtime` AS p
+  o.quantity * p.price AS trade_value FROM stock_orders_<lastname> AS o
+JOIN stock_prices_<lastname>_keyed FOR SYSTEM_TIME AS OF o.`$rowtime` AS p
 ON o.symbol = p.symbol;
 ```
 NOTE 1: There might be empty result set if keyed customers tables was created after the order records were ingested in the stock_orders topic. 
@@ -122,7 +122,7 @@ We will join data from: User Profile , Order, Prices tables together in a single
 Create a new table for `Stock Orders <-> Users Profile <-> Stock Prices` join result:
 
 ```sql
-CREATE TABLE stock_prices_lastname_data_product (
+CREATE TABLE stock_prices_<lastname>_data_product (
   order_id INT,
   user_id STRING,
   user_name STRING,
@@ -141,10 +141,10 @@ CREATE TABLE stock_prices_lastname_data_product (
 Noticed the `WATERMARK` clause - it is used to handle event-time processing in Flink. By specifying WATERMARK FOR order_time AS order_time - INTERVAL '5' SECOND, we define a watermark for the order_time field. This watermark ensures that any event with a timestamp that is more than 5 seconds behind the current processing time is considered late. Watermarks help Flink handle out-of-order events and allow for more accurate event-time processing.
 You can read more about watermarks and event time [here.](https://docs.confluent.io/cloud/current/flink/concepts/timely-stream-processing.html#event-time-and-watermarks)
 
-Now create a new Flink job to join all three tables `Stock Orders <-> Users Profile <-> Stock Prices` and insert data into `stock_prices_lastname_data_product` table .
+Now create a new Flink job to join all three tables `Stock Orders <-> Users Profile <-> Stock Prices` and insert data into `stock_prices_<lastname>_data_product` table .
 
 ```
-INSERT INTO stock_prices_lastname_data_product
+INSERT INTO stock_prices_<lastname>_data_product
 SELECT
   o.order_id,
   o.user_id,
@@ -158,16 +158,16 @@ SELECT
   p.price AS executed_price,
   o.quantity * p.price AS trade_value,
   o.`$rowtime` AS order_time
-FROM stock_orders_lastname AS o
-JOIN stock_prices_lastname_keyed FOR SYSTEM_TIME AS OF o.`$rowtime` AS p
+FROM stock_orders_<lastname> AS o
+JOIN stock_prices_<lastname>_keyed FOR SYSTEM_TIME AS OF o.`$rowtime` AS p
   ON o.symbol = p.symbol
-JOIN user_profiles_lastname_keyed_and_masked FOR SYSTEM_TIME AS OF o.`$rowtime` AS u
+JOIN user_profiles_<lastname>_keyed_and_masked FOR SYSTEM_TIME AS OF o.`$rowtime` AS u
   ON o.user_id = u.user_id;
 ```
 
 Verify that the data was joined successfully. 
 ```
-SELECT * FROM stock_prices_lastname_data_product;
+SELECT * FROM stock_prices_<lastname>_data_product;
 ```
 
 ### 💼 5. Derive User Holdings
@@ -197,13 +197,13 @@ SELECT
   SUM(CASE WHEN side = 'BUY' THEN executed_price * quantity ELSE 0 END) AS total_invested,
 
   MAX(`$rowtime`) AS last_updated
-FROM stock_prices_lastname_data_product 
+FROM stock_prices_<lastname>_data_product 
 GROUP BY user_id, user_name, user_email, user_phone, symbol;
 ```
 
 Prepare the table for user holdings:
 ```
-CREATE TABLE user_holdings_lastname (
+CREATE TABLE user_holdings_<lastname> (
   user_id STRING,
   symbol STRING,
   user_name STRING,
@@ -219,7 +219,7 @@ CREATE TABLE user_holdings_lastname (
 
 Now you can calculate the positional holdings of the users and store the results in the new table.
 ```
-INSERT INTO user_holdings_lastname
+INSERT INTO user_holdings_<lastname>
 SELECT
   user_id,
   user_name,
@@ -241,25 +241,25 @@ SELECT
   SUM(CASE WHEN side = 'BUY' THEN executed_price * quantity ELSE 0 END) AS total_invested,
 
   MAX(`$rowtime`) AS last_updated
-FROM stock_prices_lastname_data_product 
+FROM stock_prices_<lastname>_data_product 
 GROUP BY user_id, user_name, user_email, user_phone, symbol;
 ```
 
 Verify your results:
 ```
-SELECT * FROM user_holdings_lastname;
+SELECT * FROM user_holdings_<lastname>;
 ```
 
 ### 🏆 6. Trader Leaderboard 
 
 Let's find out if top traders.
 ```
-CREATE TABLE top_traders_lastname AS
+CREATE TABLE top_traders_<lastname> AS
 SELECT
   user_id,
   COUNT(order_id) AS trade_count,
   SUM(trade_value) AS total_trade_value
-FROM stock_prices_lastname_data_product
+FROM stock_prices_<lastname>_data_product
 GROUP BY user_id
 ORDER BY total_trade_value DESC
 LIMIT 10;
@@ -269,7 +269,7 @@ LIMIT 10;
 Let's create a table to track the trade activity of each stock on an hourly basis, and then apply an over aggregation to capture trending stocks based on the most recent trading activity.
 This will help identify which stocks are trending in terms of trading volume and value.
 ```sql
-CREATE TABLE symbol_trending_activity_lastname AS
+CREATE TABLE symbol_trending_activity_<lastname> AS
 SELECT
   symbol,
   order_time,
@@ -289,7 +289,7 @@ SELECT
     ORDER BY order_time 
     ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
   ) AS rolling_trade_value
-FROM stock_prices_lastname_data_product;
+FROM stock_prices_<lastname>_data_product;
 
 ```
 - PARTITION BY symbol: ensures aggregation happens per stock.
